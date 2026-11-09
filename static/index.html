@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PulseBoard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#e9eeea;--ink:#14231f;--mute:#5d6f69;--card:#f6f9f7;--line:#cdd8d2;--ok:#1a8f62;--bad:#d93d44;--warn:#c98a12}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Instrument Sans",system-ui,sans-serif;font-variant-numeric:tabular-nums}
+main{max-width:1080px;margin:0 auto;padding:32px 20px 64px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px}
+h1{margin:0;font-size:clamp(40px,8vw,84px);line-height:.95;letter-spacing:-.04em}
+#state{font-size:18px;font-weight:600;color:var(--mute)}
+#state b{color:var(--ok)} #state.bad b{color:var(--bad)}
+#pulse{display:block;width:100%;height:120px;margin:20px 0 28px;border-block:1px solid var(--ink)}
+#pulse path{fill:none;stroke:var(--ink);stroke-width:2;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.grid{display:grid;grid-template-columns:2fr 1fr;gap:24px}
+@media(max-width:820px){.grid{grid-template-columns:1fr}}
+.svc{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:16px 18px;margin-bottom:14px}
+.top{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.top h2{margin:0;font-size:19px}
+.badge{font-weight:700;font-size:14px;color:var(--ok)} .down .badge{color:var(--bad)}
+.url{color:var(--mute);font-size:13px;overflow-wrap:anywhere}
+.bars{display:flex;gap:2px;align-items:flex-end;height:44px;margin:12px 0}
+.bars i{flex:1;background:var(--ok);border-radius:1px;min-height:3px}
+.bars i.f{background:var(--bad);height:100%!important}
+.stats{display:flex;gap:22px;font-size:14px;color:var(--mute)} .stats b{color:var(--ink);font-size:17px;display:block}
+button{font:inherit;cursor:pointer}
+.x{margin-left:auto;background:none;border:0;color:var(--mute);align-self:flex-end}
+.x:hover,.x:focus-visible{color:var(--bad)}
+form{display:grid;gap:8px;margin-bottom:22px}
+input{font:inherit;padding:10px 12px;border:1px solid var(--ink);border-radius:4px;background:var(--card)}
+form button{padding:10px;border:0;border-radius:4px;background:var(--ink);color:var(--bg);font-weight:600}
+#err{color:var(--bad);font-size:14px;min-height:20px;margin:0}
+aside h3{margin:0 0 8px}
+#log{list-style:none;margin:0;padding:0;font-size:14px}
+#log li{padding:8px 0;border-top:1px solid var(--line)} #log .d{color:var(--bad);font-weight:600} #log .u{color:var(--ok);font-weight:600}
+.empty{color:var(--mute)}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+@media(prefers-reduced-motion:no-preference){.svc{transition:border-color .3s}.svc.flash{border-color:var(--ink)}}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>PulseBoard</h1>
+  <div id="state" aria-live="polite">Connecting…</div>
+</header>
+<svg id="pulse" viewBox="0 0 600 120" preserveAspectRatio="none" role="img" aria-label="Live response time across all services"><path d="M0 60H600"/></svg>
+<div class="grid">
+  <section id="list" aria-label="Services"></section>
+  <aside>
+    <form id="add">
+      <input name="name" placeholder="Name, e.g. Billing API" required maxlength="60" aria-label="Service name">
+      <input name="url" type="url" placeholder="https://example.com/health" required aria-label="Service URL">
+      <button>Start monitoring</button>
+      <p id="err" role="alert"></p>
+    </form>
+    <h3>Incidents</h3>
+    <ul id="log"><li class="empty">No incidents yet. The demo service fails on purpose, so expect one soon.</li></ul>
+  </aside>
+</div>
+</main>
+<script>
+const $=s=>document.querySelector(s), state={}, trace=[];
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function bars(h){const max=Math.max(1,...h.filter(x=>x.ok).map(x=>x.ms));
+  return h.map(x=>x.ok?`<i style="height:${Math.max(8,x.ms/max*100)}%" title="${x.ms} ms"></i>`:`<i class="f" title="failed"></i>`).join("")}
+function card(t){return `<article class="svc ${t.up===false?"down":""}" id="t${t.id}">
+  <div class="top"><h2>${esc(t.name)}</h2><span class="badge">${t.up===null?"Waiting":t.up?"Operational":"Down"}</span></div>
+  <div class="url">${esc(t.url)}</div>
+  <div class="bars" role="img" aria-label="Recent response times">${bars(t.history)}</div>
+  <div class="stats"><span><b>${t.uptime??"–"}%</b>24h uptime</span><span><b>${t.p50??"–"} ms</b>median</span><span><b>${t.p95??"–"} ms</b>p95</span>
+  <button class="x" data-id="${t.id}" aria-label="Stop monitoring ${esc(t.name)}">Remove</button></div></article>`}
+
+function render(){const l=Object.values(state);
+  $("#list").innerHTML=l.length?l.map(card).join(""):'<p class="empty">Nothing monitored yet. Add a URL to start.</p>';
+  const bad=l.filter(t=>t.up===false).length;
+  $("#state").className=bad?"bad":"";
+  $("#state").innerHTML=!l.length?"No services":bad?`<b>${bad} of ${l.length}</b> services down`:`<b>All ${l.length}</b> services operational`}
+
+function drawPulse(){ // aggregate latency as a live trace; failures spike to the top
+  const n=60,pts=trace.slice(-n),max=Math.max(400,...pts.filter(p=>p.ok).map(p=>p.ms));
+  const d=pts.map((p,i)=>`${i?"L":"M"}${(i/(n-1)*600).toFixed(1)} ${p.ok?110-p.ms/max*90:8}`).join("");
+  $("#pulse path").setAttribute("d",d||"M0 60H600")}
+
+function logEvent(e){const ul=$("#log");ul.querySelector(".empty")?.remove();
+  const li=document.createElement("li");
+  li.innerHTML=`<span class="${e.kind==="down"?"d":"u"}">${e.kind==="down"?"Down":"Recovered"}</span> ${esc(e.target)}<br><small class="empty">${new Date(e.ts*1000).toLocaleTimeString()}</small>`;
+  ul.prepend(li)}
+
+async function load(){
+  (await (await fetch("/api/targets")).json()).forEach(t=>state[t.id]=t);
+  const ev=await (await fetch("/api/events")).json(); ev.reverse().forEach(logEvent); render()}
+
+function connect(){const es=new EventSource("/api/stream");
+  es.onmessage=m=>{const d=JSON.parse(m.data);state[d.target.id]=d.target;
+    trace.push({ms:d.ms,ok:d.ok});if(d.event)logEvent(d.event);render();drawPulse();
+    const el=$("#t"+d.target.id);if(el){el.classList.add("flash");setTimeout(()=>el.classList.remove("flash"),300)}};
+  es.onerror=()=>{$("#state").textContent="Reconnecting…"}}
+
+$("#list").addEventListener("click",async e=>{const id=e.target.dataset.id;if(!id)return;
+  await fetch("/api/targets/"+id,{method:"DELETE"});delete state[id];render()});
+$("#add").addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.target);
+  const r=await fetch("/api/targets",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:f.get("name"),url:f.get("url")})});
+  $("#err").textContent=r.ok?"":(await r.json()).detail?.toString().slice(0,120)||"Could not add that URL. Check it starts with https://";
+  if(r.ok){e.target.reset();load()}});
+load().then(connect);
+</script>
+</body>
+</html>

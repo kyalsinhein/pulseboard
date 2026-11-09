@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: pulseboard
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
