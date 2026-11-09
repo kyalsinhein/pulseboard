@@ -17,10 +17,6 @@ Self-hosted uptime and latency monitor. Python (FastAPI, asyncio, SQLite) + vani
 ## Docker
     docker build -t pulseboard . && docker run -p 8000:8000 pulseboard
 
-## Deploy (free)
-- **Render**: push to GitHub, New > Blueprint, select repo (uses `render.yaml`)
-- **Fly.io / Railway**: deploy the Dockerfile as is
-- Mount a volume at `/data` and set `DB_PATH=/data/pulseboard.db` to persist history
 
 ## API
 | Method | Path | Purpose |
