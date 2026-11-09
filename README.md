@@ -2,12 +2,15 @@
 
 Self-hosted uptime and latency monitor. Python (FastAPI, asyncio, SQLite) + vanilla JS dashboard with live updates over Server-Sent Events.
 
+Live Demo : https://pulseboard-np7k.onrender.com/
+
 ## Features
 - Concurrent async health checks (`httpx` + `asyncio.gather`) every 10s (`CHECK_INTERVAL`)
 - Live dashboard via SSE: no polling, no frameworks
 - 24h uptime, p50 / p95 latency, incident log on state changes
 - Add and remove services at runtime through a REST API
 - 7-day retention, built-in "flaky" demo service that fails on purpose
+
 
 ## Run locally
     pip install -r requirements.txt
